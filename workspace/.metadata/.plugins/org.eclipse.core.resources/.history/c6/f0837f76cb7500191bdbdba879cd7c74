@@ -1,0 +1,1179 @@
+/*
+===============================================================================
+ Name        : DrawLine.c
+ Author      : $RJ
+ Version     :
+ Copyright   : $(copyright)
+ Description : main definition
+===============================================================================
+*/
+
+#include <cr_section_macros.h>
+#include <NXP/crp.h>
+#include "LPC17xx.h"                        /* LPC17xx definitions */
+#include "ssp.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+
+
+/* Be careful with the port number and location number, because
+
+some of the location may not exist in that port. */
+
+#define PORT_NUM            0
+
+
+uint8_t src_addr[SSP_BUFSIZE];
+uint8_t dest_addr[SSP_BUFSIZE];
+
+
+#define ST7735_TFTWIDTH 127
+#define ST7735_TFTHEIGHT 159
+
+#define ST7735_CASET 0x2A
+#define ST7735_RASET 0x2B
+#define ST7735_RAMWR 0x2C
+#define ST7735_SLPOUT 0x11
+#define ST7735_DISPON 0x29
+
+
+
+#define swap(x, y) {x = x + y; y = x - y; x = x - y ;}
+
+// defining color values
+
+#define LIGHTBLUE 0x00FFE0
+#define GREEN 0x00FF00
+#define DARKBLUE 0x000033
+#define BLACK 0x000000
+#define BLUE 0x0007FF
+#define RED 0xFF0000
+#define MAGENTA 0x00F81F
+#define WHITE 0xFFFFFF
+#define PURPLE 0xCC33FF
+
+#define UpperBD 29
+#define PI      3.1415926
+
+int _height = ST7735_TFTHEIGHT;
+int _width = ST7735_TFTWIDTH;
+
+
+void spiwrite(uint8_t c)
+
+{
+
+ int pnum = 0;
+
+ src_addr[0] = c;
+
+ SSP_SSELToggle( pnum, 0 );
+
+ SSPSend( pnum, (uint8_t *)src_addr, 1 );
+
+ SSP_SSELToggle( pnum, 1 );
+
+}
+
+
+
+void writecommand(uint8_t c)
+
+{
+
+ LPC_GPIO0->FIOCLR |= (0x1<<21);
+
+ spiwrite(c);
+
+}
+
+
+
+void writedata(uint8_t c)
+
+{
+
+ LPC_GPIO0->FIOSET |= (0x1<<21);
+
+ spiwrite(c);
+
+}
+
+
+
+void writeword(uint16_t c)
+
+{
+
+ uint8_t d;
+
+ d = c >> 8;
+
+ writedata(d);
+
+ d = c & 0xFF;
+
+ writedata(d);
+
+}
+
+
+
+void write888(uint32_t color, uint32_t repeat)
+
+{
+
+ uint8_t red, green, blue;
+
+ int i;
+
+ red = (color >> 16);
+
+ green = (color >> 8) & 0xFF;
+
+ blue = color & 0xFF;
+
+ for (i = 0; i< repeat; i++) {
+
+  writedata(red);
+
+  writedata(green);
+
+  writedata(blue);
+
+ }
+
+}
+
+
+
+void setAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+
+{
+
+ writecommand(ST7735_CASET);
+
+ writeword(x0);
+
+ writeword(x1);
+
+ writecommand(ST7735_RASET);
+
+ writeword(y0);
+
+ writeword(y1);
+
+}
+
+
+void fillrect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint32_t color)
+
+{
+
+ int16_t i;
+
+ int16_t width, height;
+
+ width = x1-x0+1;
+
+ height = y1-y0+1;
+
+ setAddrWindow(x0,y0,x1,y1);
+
+ writecommand(ST7735_RAMWR);
+
+ write888(color,width*height);
+
+}
+
+
+
+void lcddelay(int ms)
+
+{
+
+ int count = 24000;
+
+ int i;
+
+ for ( i = count*ms; i--; i > 0);
+
+}
+
+
+
+void lcd_init()
+
+{
+
+ int i;
+ printf("LCD Demo Begins!!!\n");
+ // Set pins P0.16, P0.21, P0.22 as output
+ LPC_GPIO0->FIODIR |= (0x1<<16);
+
+ LPC_GPIO0->FIODIR |= (0x1<<21);
+
+ LPC_GPIO0->FIODIR |= (0x1<<22);
+
+ // Hardware Reset Sequence
+ LPC_GPIO0->FIOSET |= (0x1<<22);
+ lcddelay(500);
+
+ LPC_GPIO0->FIOCLR |= (0x1<<22);
+ lcddelay(500);
+
+ LPC_GPIO0->FIOSET |= (0x1<<22);
+ lcddelay(500);
+
+ // initialize buffers
+ for ( i = 0; i < SSP_BUFSIZE; i++ )
+ {
+
+   src_addr[i] = 0;
+   dest_addr[i] = 0;
+ }
+
+ // Take LCD display out of sleep mode
+ writecommand(ST7735_SLPOUT);
+ lcddelay(200);
+
+ // Turn LCD display on
+ writecommand(ST7735_DISPON);
+ lcddelay(200);
+
+}
+
+
+
+
+void drawPixel(int16_t x, int16_t y, uint32_t color)
+
+{
+
+ if ((x < 0) || (x >= _width) || (y < 0) || (y >= _height))
+
+ return;
+
+ setAddrWindow(x, y, x + 1, y + 1);
+
+ writecommand(ST7735_RAMWR);
+
+ write888(color, 1);
+
+}
+
+
+
+/*****************************************************************************
+
+
+** Descriptions:        Draw line function
+
+**
+
+** parameters:           Starting point (x0,y0), Ending point(x1,y1) and color
+
+** Returned value:        None
+
+**
+
+*****************************************************************************/
+
+
+void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint32_t color)
+
+{
+
+ int16_t slope = abs(y1 - y0) > abs(x1 - x0);
+
+ if (slope) {
+
+  swap(x0, y0);
+
+  swap(x1, y1);
+
+ }
+
+ if (x0 > x1) {
+
+  swap(x0, x1);
+
+  swap(y0, y1);
+
+ }
+
+ int16_t dx, dy;
+
+ dx = x1 - x0;
+
+ dy = abs(y1 - y0);
+
+ int16_t err = dx / 2;
+
+ int16_t ystep;
+
+ if (y0 < y1) {
+
+  ystep = 1;
+
+ }
+
+ else {
+
+  ystep = -1;
+
+ }
+
+ for (; x0 <= x1; x0++) {
+
+  if (slope) {
+
+   drawPixel(y0, x0, color);
+
+  }
+
+  else {
+
+   drawPixel(x0, y0, color);
+
+  }
+
+  err -= dy;
+
+  if (err < 0) {
+
+   y0 += ystep;
+
+   err += dx;
+
+  }
+
+ }
+
+}
+
+
+/*
+
+ Main Function main()
+
+*/
+typedef struct {
+	float X[UpperBD];
+	float Y[UpperBD];
+	float Z[UpperBD];
+} pworld;
+
+typedef struct {
+	float X[UpperBD];
+	float Y[UpperBD];
+	float Z[UpperBD];
+} pviewer;
+
+typedef struct {
+	float X;
+	float Y;
+	float Z;
+} viewerPoint;
+
+typedef struct {
+	float X[UpperBD];
+	float Y[UpperBD];
+} pperspective;
+
+typedef struct {
+	float X;
+	float Y;
+} perspectivePoint;
+
+typedef struct {
+    float r[UpperBD], g[UpperBD], b[UpperBD];
+} pt_diffuse;
+
+typedef struct {
+	float Rho;
+	float sPheta;
+	float cPheta;
+	float sPhi;
+	float cPhi;
+	float D_focal;
+} viewerAngles;
+
+int randomGenerator(int lower, int upper) {
+    return rand() % (upper - lower + 1) + lower;
+}
+
+viewerAngles viewerAnglesCalculation(float Xe, float Ye, float Ze, float D_focal)
+{
+	viewerAngles viewerAngles;
+	viewerAngles.Rho = sqrt(pow(Xe,2) + pow(Ye,2) + pow(Ze,2));
+	viewerAngles.sPheta = Ye / sqrt(pow(Xe,2) + pow(Ye,2));
+	viewerAngles.cPheta = Xe / sqrt(pow(Xe,2) + pow(Ye,2));
+	viewerAngles.sPhi = sqrt(pow(Xe,2) + pow(Ye,2)) / viewerAngles.Rho;
+	viewerAngles.cPhi = Ze / viewerAngles.Rho;
+	viewerAngles.D_focal = D_focal;
+
+	return viewerAngles;
+}
+
+pperspective transformPipeline(viewerAngles viewerAngles, pworld world)
+{
+	pviewer viewer;
+	pperspective perspective;
+	int Num_index = UpperBD - 1;
+
+    float xMin = 1000.0, xMax = -1000.0;
+    float yMin = 1000.0, yMax = -1000.0;
+
+	for(int i = 0; i <= Num_index; i++)
+	{
+		viewer.X[i] = -viewerAngles.sPheta * world.X[i] + viewerAngles.cPheta * world.Y[i];
+		viewer.Y[i] = -viewerAngles.cPheta * viewerAngles.cPhi * world.X[i] - viewerAngles.cPhi * viewerAngles.sPheta * world.Y[i] + viewerAngles.sPhi * world.Z[i];
+		viewer.Z[i] = -viewerAngles.sPhi * viewerAngles.cPheta * world.X[i] - viewerAngles.sPhi * viewerAngles.cPheta * world.Y[i] -viewerAngles.cPheta * world.Z[i] + viewerAngles.Rho;
+	}
+
+	for(int i = 0; i <= Num_index; i++)
+	{
+		perspective.X[i] = viewerAngles.D_focal * viewer.X[i] / viewer.Z[i];
+		perspective.Y[i] = viewerAngles.D_focal * viewer.Y[i] / viewer.Z[i];
+		//printf("Perspective [%d]:, X: %f, y: %f \n", i, perspective.X[i], perspective.Y[i]);
+        if (perspective.X[i] > xMax) xMax = perspective.X[i];
+        if (perspective.X[i] < xMin) xMin = perspective.X[i];
+        if (perspective.Y[i] > yMax) yMax = perspective.Y[i];
+        if (perspective.Y[i] < yMin) yMin = perspective.Y[i];
+	}
+
+    for(int i = 0; i <= Num_index; i++)
+    {
+    	int scale = 10;
+        perspective.X[i] = perspective.X[i]*scale;
+        perspective.Y[i] = perspective.Y[i]*scale;
+        //printf("Scaled: %f \n", (xMax-xMin)*scale);
+    }
+
+
+	for(int i = 0; i <= Num_index; i++)
+	{
+		perspective.X[i] = perspective.X[i] + ST7735_TFTWIDTH/2;
+		perspective.Y[i] = -perspective.Y[i] + ST7735_TFTHEIGHT/2;
+		//printf("After move-Perspective [%d]:, X: %f, y: %f \n", i, perspective.X[i], perspective.Y[i]);
+	}
+
+	return perspective;
+}
+
+pworld points(float size, float zIncrease)
+{
+	pworld  world;
+
+	//define the x-y-z world coordinate
+	world.X[0] = 0.0;    world.Y[0] =  0.0;   world.Z[0] =  0.0;    // origin
+	world.X[1] = 50.0;   world.Y[1] =  0.0;   world.Z[1] =  0.0;    // x-axis
+	world.X[2] = 0.0;    world.Y[2] =  50.0;  world.Z[2] =  0.0;    // y-axis
+	world.X[3] = 0.0;    world.Y[3] =  0.0;   world.Z[3] =  50.0;   // y-axis
+
+	//cube
+	world.X[4] = 0.0;    world.Y[4] =  0.0;   world.Z[4] =  zIncrease;    //
+	world.X[5] = size;   world.Y[5] =  0.0;   world.Z[5] =  zIncrease;    //
+	world.X[6] = size;   world.Y[6] =  size;  world.Z[6] =  zIncrease;    //
+	world.X[7] = 0.0;    world.Y[7] =  size;  world.Z[7] =  zIncrease;    //
+
+	world.X[8] = 0.0;    world.Y[8] =  0.0;   world.Z[8] =  size + zIncrease;   //
+	world.X[9] = size;    world.Y[9] =  0.0;   world.Z[9] =  size + zIncrease;    //
+	world.X[10] = size;   world.Y[10] =  size;  world.Z[10] =  size + zIncrease;   //
+	world.X[11] = 0.0;     world.Y[11] =  size;  world.Z[11] =  size + zIncrease;    //
+
+    //14 = normal vector, 13 = A, 12 = Ps, 8 = top left box vertex
+    world.X[12] = -30; world.Y[12] = 45; world.Z[12] = 180; // Ps (point source)
+    world.X[13] = 0; world.Y[13] = 0; world.Z[13] = 0; // arbitrary vector A on x-y plane
+    world.X[14] = 0; world.Y[14] = 0; world.Z[14] = 1; // normal vector for x-y
+
+    world.X[15] = 15.0;    world.Y[15] =  20.0;   world.Z[15] =  size + zIncrease;
+    world.X[16] = 90.0;    world.Y[16] =  20.0;   world.Z[16] =  size + zIncrease;
+    world.X[17] = 90.0;    world.Y[17] =  40.0;   world.Z[17] =  size + zIncrease;
+    world.X[18] = 60.0;    world.Y[18] =  40.0;   world.Z[18] =  size + zIncrease;
+    world.X[19] = 60.0;    world.Y[19] =  70.0;   world.Z[19] =  size + zIncrease;
+    world.X[20] = 45.0;    world.Y[20] =  70.0;   world.Z[20] =  size + zIncrease;
+    world.X[21] = 45.0;    world.Y[21] =  40.0;   world.Z[21] =  size + zIncrease;
+    world.X[22] = 30.0;    world.Y[22] =  40.0;   world.Z[22] =  size + zIncrease;
+    world.X[23] = 30.0;    world.Y[23] =  80.0;   world.Z[23] =  size + zIncrease;
+    world.X[24] = 15.0;    world.Y[24] =  80.0;   world.Z[24] =  size + zIncrease;
+
+    return world;
+}
+
+pt_diffuse diffuseReflectionLetter(pworld world)
+{
+
+    //-------------diffuse reflection-----------*
+    pt_diffuse  diffuse;   //diffuse.r[3]
+
+    //-------reflectivity coefficient-----------*
+    #define 	Kdr 	0.8
+    #define 	Kdg 	0.0
+    #define 	Kdb 	0.0
+
+    //--------compute distance------------------*
+    float distance[UpperBD];
+    for (int i=15; i<=24; i++) {
+    distance[i] = sqrt(pow((world.X[i]-world.X[12]),2)+         //intersect pt p7
+                        pow((world.Y[i]-world.Y[12]),2)+
+                        pow((world.X[i]-world.X[12]),2) );
+    //std::cout << "distance[i]  " << distance[i] << std::endl;
+    }
+
+    float angle[UpperBD], tmp_dotProd[UpperBD], tmp_mag_dotProd[UpperBD];
+    for (int i = 15; i <= 24; i++) {
+
+		tmp_dotProd[i] = world.Z[i] - world.X[12];
+		printf("tep_dotProd[%d] is: %f, ", i, tmp_dotProd[i]);
+
+		tmp_mag_dotProd[i] = sqrt(pow((world.X[i] - world.X[12]), 2) +         //[12] pt light source
+									pow((world.Y[i] - world.Y[12]), 2) +
+									pow((world.Z[i] - world.Z[12]), 2));
+		printf("tmp_mag_dotProd[%d] is: %f, ", i, tmp_mag_dotProd[i]);
+
+		angle[i] = tmp_dotProd[i] / tmp_mag_dotProd[i];
+		printf("Angle is: %f, ", angle[i]);
+
+		//compute color intensity
+		diffuse.r[i] = Kdr * angle[i] / pow(distance[i], 2);
+		printf("diffuse[%d] is: %f.\n", i, diffuse.r[i]);
+		diffuse.g[i] = Kdg * angle[i] / pow(distance[i], 2);
+		diffuse.b[i] = Kdb * angle[i] / pow(distance[i], 2);
+	}
+
+    int display_scaling = 15000;
+	//plot diffuse reflection
+/*	for (int i = 15; i <= 24; i++) {
+		float r, g, b;
+		r = diffuse.r[i] * display_scaling * 255 + 50;
+		g = diffuse.g[i] * display_scaling * 255 + 50;
+		b = diffuse.b[i] * display_scaling * 255 + 50;
+		printf( "point[%d], r: %f, g: %f, b: %f \n", i, r, g, b);
+		long color = (int)r << 16 | (int)g << 8 | (int)b;
+		printf( "color is 0x%X \n", color);
+	} */
+
+	return diffuse;
+}
+
+float round_value(float v)
+{
+  return floor(v + 0.5);
+}
+
+void interpolationWithLineDDA(int startIndex, int endIndex, pperspective perspective, pt_diffuse diffuse) {
+
+    //--------interpolation demo--------------*
+    // find a middle point on the line between pt indexed 15 and 16
+    // which are the points of the projection plane on x-y plane
+
+    float rDiff_Point[UpperBD], gDiff_Point[UpperBD], bDiff_Point[UpperBD];
+    float left_rDiff_Pt[UpperBD], left_gDiff_Pt[UpperBD], left_bDiff_Pt[UpperBD];
+    float right_rDiff_Pt[UpperBD], right_gDiff_Pt[UpperBD], right_bDiff_Pt[UpperBD];
+
+
+    rDiff_Point[startIndex] = diffuse.r[startIndex];
+    gDiff_Point[startIndex] = diffuse.g[startIndex];
+    bDiff_Point[startIndex] = diffuse.b[startIndex] ;
+
+    rDiff_Point[endIndex] = diffuse.r[endIndex];
+    gDiff_Point[endIndex] = diffuse.g[endIndex];
+    bDiff_Point[endIndex] = diffuse.b[endIndex] ;
+
+
+    left_rDiff_Pt[startIndex] = rDiff_Point[startIndex];
+    left_gDiff_Pt[startIndex] = gDiff_Point[startIndex];
+    left_bDiff_Pt[startIndex] = gDiff_Point[startIndex];
+
+    right_rDiff_Pt[endIndex] = rDiff_Point[endIndex];
+    right_gDiff_Pt[endIndex] = gDiff_Point[endIndex];
+    right_bDiff_Pt[endIndex] = gDiff_Point[endIndex];
+
+    float newx_rDiff_Pt, newx_gDiff_Pt, newx_bDiff_Pt; //for interpolation
+    float newy_rDiff_Pt, newy_gDiff_Pt, newy_bDiff_Pt; //for interpolation
+    float new_rDiff_Pt,  new_gDiff_Pt,  new_bDiff_Pt;  //for interpolation
+
+	double dx = (perspective.X[endIndex] - perspective.X[startIndex]);
+	double dy = (perspective.Y[endIndex] - perspective.Y[startIndex]);
+	double steps;
+	float xInc, yInc, x = perspective.X[startIndex], y = perspective.Y[startIndex];
+	/* Find out whether to increment x or y */
+	steps = (abs(dx) > abs(dy)) ? (abs(dx)) : (abs(dy));
+	xInc = dx / (float) steps;
+	yInc = dy / (float) steps;
+
+	int k;
+	/* For every step, find an intermediate vertex */
+	for (k = 0; k < steps; k++) {
+		x += xInc;
+		y += yInc;
+		/* printf("%0.6lf %0.6lf\n",floor(x), floor(y)); */
+		perspectivePoint point;
+		point.X = round_value(x);
+		point.Y = round_value(y);
+
+	    // y - y1 = (y2-y1)/(x2-x1) (x-x1)
+	    // for x direction
+	    // independent variable is .X and function y is diffuse reflection intensity
+	    newx_rDiff_Pt = rDiff_Point[startIndex] +
+	                    (rDiff_Point[endIndex] - rDiff_Point[startIndex])/(perspective.X[endIndex]-perspective.X[startIndex])*
+	                    (point.X - perspective.X[startIndex]);
+	    newx_gDiff_Pt = 0.0;
+	    newx_bDiff_Pt = 0.0;
+
+	    // for y direction
+	    // independent variable is .Y and function y is diffuse reflection intensity
+	    newy_rDiff_Pt = rDiff_Point[startIndex] +
+	                    (rDiff_Point[endIndex] - rDiff_Point[startIndex])/(perspective.Y[endIndex]-perspective.Y[startIndex])*
+	                    (point.Y - perspective.Y[startIndex]);
+	    newy_gDiff_Pt = 0.0; newy_bDiff_Pt = 0.0;
+
+	    float display_scaling = 1800000.0;
+	    // combination of both
+	    new_rDiff_Pt = display_scaling *(newx_rDiff_Pt +  newy_rDiff_Pt)/2.0;
+	    if(new_rDiff_Pt > 255) new_rDiff_Pt = 250;
+	    if(new_rDiff_Pt < 0) new_rDiff_Pt = 1;
+	    new_gDiff_Pt = 0.0;
+	    new_bDiff_Pt = 0.0;
+	    uint32_t color = (int)new_rDiff_Pt << 16 | (int)new_gDiff_Pt << 8 | (int)new_bDiff_Pt;
+		printf( "point[%f,%f], r: %f, g: %f, b: %f \n", point.X, point.Y, new_rDiff_Pt, new_gDiff_Pt, new_bDiff_Pt);
+		printf( "color is 0x%X \n", color);
+	    //drawPixel(point.X, point.Y, color);
+	    fillrect(point.X-1, point.Y-1, point.X+1, point.Y+1, color);
+	}
+}
+
+perspectivePoint transformPipelinePoint(viewerAngles viewerAngles, float X, float Y, float Z)
+{
+	viewerPoint viewer;
+	perspectivePoint perspective;
+	int scale = 10;
+
+	viewer.X = -viewerAngles.sPheta * X + viewerAngles.cPheta * Y;
+	viewer.Y = -viewerAngles.cPheta * viewerAngles.cPhi * X - viewerAngles.cPhi * viewerAngles.sPheta * Y + viewerAngles.sPhi * Z;
+	viewer.Z = -viewerAngles.sPhi * viewerAngles.cPheta * X - viewerAngles.sPhi * viewerAngles.cPheta * Y -viewerAngles.cPheta * Z + viewerAngles.Rho;
+
+	perspective.X = viewerAngles.D_focal * viewer.X / viewer.Z;
+	perspective.Y = viewerAngles.D_focal * viewer.Y / viewer.Z;
+	//printf("Perspective [%d]:, X: %f, y: %f \n", i, perspective.X[i], perspective.Y[i]);
+
+    perspective.X = perspective.X*scale;
+    perspective.Y = perspective.Y*scale;
+    //std::cout << i << perspective.X[i] << perspective.Y[i] << std::endl;
+
+	perspective.X = perspective.X + ST7735_TFTWIDTH/2;
+	perspective.Y = -perspective.Y + ST7735_TFTHEIGHT/2;
+	//printf("After move-Perspective [%d]:, X: %f, y: %f \n", i, perspective.X[i], perspective.Y[i]);
+
+	return perspective;
+}
+
+void drawSquare(int16_t x, int16_t y, uint32_t color, float lambda, int16_t length, viewerAngles viewerAngles)
+{
+	int16_t x0, y0, x1, y1, x2, y2, x3, y3;
+	float X0, Y0, Z0, X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3;
+
+	uint32_t k;
+
+	int16_t tmp_x0,tmp_x1,tmp_x2,tmp_x3;
+	int16_t tmp_y0,tmp_y1,tmp_y2,tmp_y3;
+	float tmp_X0,tmp_Y0,tmp_Z0,tmp_X1,tmp_Y1,tmp_Z1;
+	float tmp_X2,tmp_Y2,tmp_Z2,tmp_X3,tmp_Y3,tmp_Z3;
+
+	// Define the 4 vertices values along with offset (square length) from the first given vertex (x,y)
+	//point 0
+	x0 = x;
+	y0 = y;
+
+	X0 = 100;
+	Y0 = y0;
+	Z0 = 100 - x0;
+	perspectivePoint point0 = transformPipelinePoint(viewerAngles, X0, Y0, Z0);
+
+	//point 1
+	x1 = x + length;
+	y1 = y;
+
+	X1 = 100;
+	Y1 = y1;
+	Z1 = 100 - x1;
+
+	perspectivePoint point1 = transformPipelinePoint(viewerAngles, X1, Y1, Z1);
+
+	//point 2
+	x2 = x + length;
+	y2 = y + length;
+
+	X2 = 100;
+	Y2 = y2;
+	Z2 = 100 - x2;
+
+	perspectivePoint point2 = transformPipelinePoint(viewerAngles, X2, Y2, Z2);
+
+	//point 3
+	x3 = x;
+	y3 = y + length;
+
+	X3 = 100;
+	Y3 = y3;
+	Z3 = 100 - x3;
+
+	perspectivePoint point3 = transformPipelinePoint(viewerAngles, X3, Y3, Z3);
+
+	// Draw the first square (4 drawline() for 4 sides)
+	drawLine(point0.X, point0.Y, point1.X, point1.Y, color);
+	lcddelay(10);
+	drawLine(point1.X, point1.Y, point2.X, point2.Y, color);
+	lcddelay(10);
+	drawLine(point2.X, point2.Y, point3.X, point3.Y, color);
+	lcddelay(10);
+	drawLine(point3.X, point3.Y, point0.X, point0.Y, color);
+	lcddelay(10);
+
+	for(k = 0; k < 10; k++)
+	{
+		// Use the equation given in class to calculate the 4 vertices' coordinates of the recursive squares
+		tmp_x0 = x0 + (lambda * (x1 - x0));
+		tmp_y0 = y0 + (lambda * (y1 - y0));
+
+		tmp_X0 = 100;
+		tmp_Y0 = tmp_y0;
+		tmp_Z0 = 100 - tmp_x0;
+
+		perspectivePoint pointTmp0 = transformPipelinePoint(viewerAngles, tmp_X0, tmp_Y0, tmp_Z0);
+
+	  	tmp_x1 = x1 + (lambda * (x2 - x1));
+	  	tmp_y1 = y1 + (lambda * (y2 - y1));
+
+		tmp_X1 = 100;
+		tmp_Y1 = tmp_y1;
+		tmp_Z1 = 100 - tmp_x1;
+
+		perspectivePoint pointTmp1 = transformPipelinePoint(viewerAngles, tmp_X1, tmp_Y1, tmp_Z1);
+
+	  	tmp_x2 = x2 + (lambda * (x3 - x2));
+	  	tmp_y2 = y2 + (lambda * (y3 - y2));
+
+		tmp_X2 = 100;
+		tmp_Y2 = tmp_y2;
+		tmp_Z2 = 100 - tmp_x2;
+
+		perspectivePoint pointTmp2 = transformPipelinePoint(viewerAngles, tmp_X2, tmp_Y2, tmp_Z2);
+
+	  	tmp_x3 = x3 + (lambda * (x0 - x3));
+	  	tmp_y3 = y3 + (lambda * (y0 - y3));
+
+		tmp_X3 = 100;
+		tmp_Y3 = tmp_y3;
+		tmp_Z3 = 100 - tmp_x3;
+
+		perspectivePoint pointTmp3 = transformPipelinePoint(viewerAngles, tmp_X3, tmp_Y3, tmp_Z3);
+
+	  	// Draw the next next level square with the new calculated vertices
+	  	drawLine(pointTmp0.X, pointTmp0.Y, pointTmp1.X, pointTmp1.Y, color);
+	  	lcddelay(10);
+	  	drawLine(pointTmp1.X, pointTmp1.Y, pointTmp2.X, pointTmp2.Y, color);
+	  	lcddelay(10);
+	  	drawLine(pointTmp2.X, pointTmp2.Y, pointTmp3.X, pointTmp3.Y, color);
+	  	lcddelay(10);
+	  	drawLine(pointTmp3.X, pointTmp3.Y, pointTmp0.X, pointTmp0.Y, color);
+	  	lcddelay(10);
+
+	  	 // Initiate the original vertices' values with the new calculated vertices' values
+	  	 x0 = tmp_x0;
+	  	 x1 = tmp_x1;
+	  	 x2 = tmp_x2;
+	  	 x3 = tmp_x3;
+	  	 y0 = tmp_y0;
+	  	 y1 = tmp_y1;
+	  	 y2 = tmp_y2;
+	  	 y3 = tmp_y3;
+	}
+}
+
+void drawSquares(float lambda ,int size, viewerAngles viewerAngles)
+{
+	int x, y, colorIndex;
+
+	uint32_t colorList[] = {LIGHTBLUE, GREEN, DARKBLUE, BLUE, RED, MAGENTA, WHITE, PURPLE};
+
+	while(1)
+	{
+		colorIndex = randomGenerator(0, 7);
+
+	 	x = randomGenerator(size, 100 - size - 5);
+	 	y = randomGenerator(size, 100 - size - 5);
+	 	drawSquare(x, y, colorList[colorIndex], lambda, size, viewerAngles);
+	 	if(size > 0){
+	 		size = size - randomGenerator(0, 3);
+	 	}
+	 	else{
+	 		break;
+	 	}
+	}
+}
+
+void drawTree(int16_t x, int16_t y, uint32_t color, float lambda, int16_t length, viewerAngles viewerAngles)
+{
+	int tmp_points[1024][2];
+	int roots[1024][2];
+
+	int x_tmp, y_tmp;
+	int level = 0;
+
+	if(length >= 10 && length < 25)
+	{
+		float X0 = 100 - (x-1);
+		float Y0 = 100;
+		float Z0 = 100 - y;
+		perspectivePoint point0 = transformPipelinePoint(viewerAngles, X0, Y0, Z0);
+		float X1 = 100 - (x-1);
+		float Y1 = 100;
+		float Z1 = 100 - (y-length);
+		perspectivePoint point1 = transformPipelinePoint(viewerAngles, X1, Y1, Z1);
+		float X2 = 100 - x;
+		float Y2 = 100;
+		float Z2 = 100 - y;
+		perspectivePoint point2 = transformPipelinePoint(viewerAngles, X2, Y2, Z2);
+		float X3 = 100 - x;
+		float Y3 = 100;
+		float Z3 = 100 - (y-length);
+		perspectivePoint point3 = transformPipelinePoint(viewerAngles, X3, Y3, Z3);
+		float X4 = 100 - (x+1);
+		float Y4 = 100;
+		float Z4 = 100 - y;
+		perspectivePoint point4 = transformPipelinePoint(viewerAngles, X4, Y4, Z4);
+		float X5 = 100 - (x+1);
+		float Y5 = 100;
+		float Z5 = 100 - (y-length);
+		perspectivePoint point5 = transformPipelinePoint(viewerAngles, X5, Y5, Z5);
+
+		drawLine(point0.X, point0.Y, point1.X, point1.Y, RED);
+		drawLine(point2.X, point2.Y, point3.X, point3.Y, RED);
+		drawLine(point4.X, point4.Y, point5.X, point5.Y, RED);
+	}
+	if(length >= 25)
+	{
+		float X0 = 100 - (x-2);
+		float Y0 = 100;
+		float Z0 = 100 - y;
+		perspectivePoint point0 = transformPipelinePoint(viewerAngles, X0, Y0, Z0);
+		float X1 = 100 - (x-2);
+		float Y1 = 100;
+		float Z1 = 100 - (y-length);
+		perspectivePoint point1 = transformPipelinePoint(viewerAngles, X1, Y1, Z1);
+		float X2 = 100 - (x-1);
+		float Y2 = 100;
+		float Z2 = 100 - y;
+		perspectivePoint point2 = transformPipelinePoint(viewerAngles, X2, Y2, Z2);
+		float X3 = 100 - (x-1);
+		float Y3 = 100;
+		float Z3 = 100 - (y-length);
+		perspectivePoint point3 = transformPipelinePoint(viewerAngles, X3, Y3, Z3);
+		float X4 = 100 - x;
+		float Y4 = 100;
+		float Z4 = 100 - y;
+		perspectivePoint point4 = transformPipelinePoint(viewerAngles, X4, Y4, Z4);
+		float X5 = 100 - x;
+		float Y5 = 100;
+		float Z5 = 100 - (y-length);
+		perspectivePoint point5 = transformPipelinePoint(viewerAngles, X5, Y5, Z5);
+		float X6 = 100 - (x+1);
+		float Y6 = 100;
+		float Z6 = 100 - y;
+		perspectivePoint point6 = transformPipelinePoint(viewerAngles, X6, Y6, Z6);
+		float X7 = 100 - (x+1);
+		float Y7 = 100;
+		float Z7 = 100 - (y-length);
+		perspectivePoint point7 = transformPipelinePoint(viewerAngles, X7, Y7, Z7);
+		float X8 = 100 - (x+2);
+		float Y8 = 100;
+		float Z8 = 100 - y;
+		perspectivePoint point8 = transformPipelinePoint(viewerAngles, X8, Y8, Z8);
+		float X9 = 100 - (x+2);
+		float Y9 = 100;
+		float Z9 = 100 - (y-length);
+		perspectivePoint point9 = transformPipelinePoint(viewerAngles, X9, Y9, Z9);
+
+		drawLine(point0.X, point0.Y, point1.X, point1.Y, RED);
+		drawLine(point2.X, point2.Y, point3.X, point3.Y, RED);
+		drawLine(point4.X, point4.Y, point5.X, point5.Y, RED);
+		drawLine(point6.X, point6.Y, point7.X, point7.Y, RED);
+		drawLine(point8.X, point8.Y, point9.X, point9.Y, RED);
+	}
+	else
+	{
+		float X0 = 100 - x;
+		float Y0 = 100;
+		float Z0 = 100 - y;
+		perspectivePoint point0 = transformPipelinePoint(viewerAngles, X0, Y0, Z0);
+		float X1 = 100 - x;
+		float Y1 = 100;
+		float Z1 = 100 - (y-length);
+		perspectivePoint point1 = transformPipelinePoint(viewerAngles, X1, Y1, Z1);
+		drawLine(point0.X, point0.Y, point1.X, point1.Y, RED);
+	}
+
+	roots[0][0] = x;
+	roots[0][1] = y - length;
+
+	int rootx, rooty;
+
+	for(int i = 1; i < 10; i++){
+
+		for(int j = 0; j < (int) pow(2, i); j++){
+			int angle = randomGenerator(15, 45);
+			double radians = angle * PI / 180;
+			if(j % 2 == 0){
+				x_tmp = roots[j/2][0] - lambda * length * sin(radians);
+				y_tmp = roots[j/2][1] - lambda * length * cos(radians);
+				rootx = roots[j/2][0];
+				rooty = roots[j/2][1] - 1;
+			}
+			else{
+				int angle_change = randomGenerator(-5, 3);
+				double radians_change = angle_change * PI / 180;
+				x_tmp = roots[j/2][0] + lambda * length * sin(radians + radians_change);
+				y_tmp = roots[j/2][1] - lambda * length * cos(radians + radians_change);
+				rootx = roots[j/2][0];
+				rooty = roots[j/2][1] - 1;
+			}
+
+			if(x_tmp <= 0 || x_tmp >= 100 || y_tmp <= 0) break;
+
+			if(i % 2 == 0)
+			{
+				float X0 = 100 - rootx;
+				float Y0 = 100;
+				float Z0 = 100 - rooty;
+				perspectivePoint point0 = transformPipelinePoint(viewerAngles, X0, Y0, Z0);
+				float X1 = 100 - x_tmp;
+				float Y1 = 100;
+				float Z1 = 100 - y_tmp;
+				perspectivePoint point1 = transformPipelinePoint(viewerAngles, X1, Y1, Z1);
+				//printf("Point root:[%d][%d], temp:[%d][%d]\n", rootx, rooty, x_tmp, y_tmp);
+				//printf("P root:[%f][%f], P temp:[%f][%f]\n", point0.X, point0.Y, point1.X, point1.Y);
+				//printf("\n");
+				drawLine(point0.X, point0.Y, point1.X, point1.Y, MAGENTA);
+				lcddelay(3);
+			}
+			else
+			{
+				float X3 = 100 - rootx;
+				float Y3 = 100;
+				float Z3 = 100 - rooty;
+				perspectivePoint point3 = transformPipelinePoint(viewerAngles, X3, Y3, Z3);
+				float X4 = 100 - x_tmp;
+				float Y4 = 100;
+				float Z4 = 100 - y_tmp;
+				perspectivePoint point4 = transformPipelinePoint(viewerAngles, X4, Y4, Z4);
+				//printf("Point root:[%d][%d], temp:[%d][%d]\n", rootx, rooty, x_tmp, y_tmp);
+				//printf("Point root:[%f][%f], temp:[%f][%f]\n", point3.X, point3.Y, point4.X, point4.Y);
+				//printf("\n");
+				drawLine(point3.X, point3.Y, point4.X, point4.Y, BLUE);
+				lcddelay(3);
+			}
+
+
+			tmp_points[j][0] = x_tmp;
+			tmp_points[j][1] = y_tmp;
+		}
+		for(int k = 0; k < (int) pow(2, i); k++){
+			roots[k][0] = tmp_points[k][0];
+			roots[k][1] = tmp_points[k][1];
+		}
+	}
+
+}
+
+void drawForest(float lambda, int size, viewerAngles viewerAngles)
+{
+	int x, y, colorIndex;
+
+	uint32_t colorList[] = {LIGHTBLUE, GREEN, DARKBLUE, BLUE, RED, MAGENTA, WHITE, PURPLE};
+
+	int count = 0;
+	while(1)
+	{
+
+		colorIndex = randomGenerator(0, 7);
+	 	if(count % 2 == 0)
+	 	{
+	 		x = randomGenerator(10, 100/2);
+	 	}
+	 	else
+	 	{
+	 		x = randomGenerator(100/2, 100-10);
+	 	}
+	 	y = randomGenerator(60, 95);
+	 	drawTree(x, y, colorList[colorIndex], lambda, size, viewerAngles);
+	 	if(size > 0){
+	 		size = size - randomGenerator(0, 3);
+	 	}
+	 	else{
+	 		size = 25;
+	 	}
+	 	count++;
+	}
+}
+
+void drawShadow(pworld world, viewerAngles viewerAngles, pperspective perspective){
+    float temp = (world.X[14]*(world.X[13]-world.X[12]))
+                +(world.Y[14]*(world.Y[13]-world.Y[12]))
+                +(world.Z[14]*(world.Z[13]-world.Z[12]));
+    float lambda = temp / ((world.X[14]*(world.X[9]-world.X[12]))
+                           +(world.Y[14]*(world.Y[9]-world.Y[12]))
+                           +(world.Z[14]*(world.Z[9]-world.Z[12])));
+    float lambda_2 = temp / ((world.X[14]*(world.X[10]-world.X[12]))
+                             +(world.Y[14]*(world.Y[10]-world.Y[12]))
+                             +(world.Z[14]*(world.Z[10]-world.Z[12])));
+    float lambda_3 = temp / ((world.X[14]*(world.X[4]-world.X[12]))
+                             +(world.Y[14]*(world.Y[4]-world.Y[12]))
+                             +(world.Z[14]*(world.Z[4]-world.Z[12])));
+    float lambda_4 = temp / ((world.X[14]*(world.X[7]-world.X[12]))
+                             +(world.Y[14]*(world.Y[7]-world.Y[12]))
+                             +(world.Z[14]*(world.Z[7]-world.Z[12])));
+
+    world.X[25] = world.X[12] + lambda*(world.X[9] - world.X[12]); // x component for Intersection point for p9
+    world.Y[25] = world.Y[12] + lambda*(world.Y[9] - world.Y[12]); // y component for Intersection point for p9
+    world.Z[25] = 0.0;
+    perspectivePoint point25 = transformPipelinePoint(viewerAngles, world.X[25], world.Y[25], world.Z[25]);
+
+    world.X[26] = world.X[12] + lambda_2*(world.X[10] - world.X[12]);  // x component for intersection point for p10
+    world.Y[26] = world.Y[12] + lambda_2*(world.Y[10] - world.Y[12]);  // x component for intersection point for p10
+    world.Z[26] = 0.0;
+    perspectivePoint point26 = transformPipelinePoint(viewerAngles, world.X[26], world.Y[26], world.Z[26]);
+
+    world.X[27] = world.X[12] + lambda_3*(world.X[4] - world.X[12]);  // x component for intersection point for p4
+    world.Y[27] = world.Y[12] + lambda_3*(world.Y[4] - world.Y[12]);  // x component for intersection point for p4
+    world.Z[27] = 0.0;
+    perspectivePoint point27 = transformPipelinePoint(viewerAngles, world.X[27], world.Y[27], world.Z[27]);
+
+    world.X[28] = world.X[12] + lambda_4*(world.X[7] - world.X[12]);  // x component for intersection point for p7
+    world.Y[28] = world.Y[12] + lambda_4*(world.Y[7] - world.Y[12]);  // x component for intersection point for p7
+    world.Z[28] = 0.0;
+    perspectivePoint point28 = transformPipelinePoint(viewerAngles, world.X[28], world.Y[28], world.Z[28]);
+
+	//draw shadow
+	drawLine(perspective.X[12],perspective.Y[12],point25.X,point25.Y,LIGHTBLUE); //p9
+	drawLine(perspective.X[12],perspective.Y[12],point26.X,point26.Y,LIGHTBLUE); //p10
+	drawLine(perspective.X[12],perspective.Y[12],point27.X,point27.Y,LIGHTBLUE); //p4
+	drawLine(perspective.X[12],perspective.Y[12],point28.X,point28.Y,LIGHTBLUE); //p7
+
+	drawLine(point25.X,point25.Y,point26.X,point26.Y,PURPLE);
+	drawLine(point27.X,point27.Y,point28.X,point28.Y,PURPLE);
+	drawLine(point25.X,point25.Y,point27.X,point27.Y,PURPLE);
+	drawLine(point26.X,point26.Y,point28.X,point28.Y,PURPLE);
+
+}
+
+void draw(float Xe, float Ye, float Ze, float D_focal, float size, float zIncrease)
+{
+	viewerAngles viewerAngles = viewerAnglesCalculation(Xe, Ye, Ze, D_focal);
+	pworld xyzcoord = points(size, zIncrease);
+	pperspective perspective = transformPipeline(viewerAngles, xyzcoord);
+	int color[] ={WHITE, RED, GREEN, BLUE};
+
+	for(int i = 0; i < 4; i++){
+		drawLine(perspective.X[0],perspective.Y[0],perspective.X[i],perspective.Y[i], color[i]);
+	}
+
+	//draw cube
+	drawLine(perspective.X[4],perspective.Y[4],perspective.X[5],perspective.Y[5],WHITE);
+	drawLine(perspective.X[5],perspective.Y[5],perspective.X[6],perspective.Y[6],WHITE);
+	drawLine(perspective.X[6],perspective.Y[6],perspective.X[7],perspective.Y[7],WHITE);
+	drawLine(perspective.X[7],perspective.Y[7],perspective.X[4],perspective.Y[4],WHITE);
+
+	drawLine(perspective.X[8],perspective.Y[8],perspective.X[9],perspective.Y[9],WHITE);
+	drawLine(perspective.X[9],perspective.Y[9],perspective.X[10],perspective.Y[10],WHITE);
+	drawLine(perspective.X[10],perspective.Y[10],perspective.X[11],perspective.Y[11],WHITE);
+	drawLine(perspective.X[11],perspective.Y[11],perspective.X[8],perspective.Y[8],WHITE);
+
+	drawLine(perspective.X[4],perspective.Y[4],perspective.X[8],perspective.Y[8],WHITE);
+	drawLine(perspective.X[5],perspective.Y[5],perspective.X[9],perspective.Y[9],WHITE);
+	drawLine(perspective.X[6],perspective.Y[6],perspective.X[10],perspective.Y[10],WHITE);
+	drawLine(perspective.X[7],perspective.Y[7],perspective.X[11],perspective.Y[11],WHITE);
+
+	pt_diffuse diffuse = diffuseReflectionLetter(xyzcoord);
+
+	//draw letter
+	for(int i = 15; i < 24; i++){
+		//drawLine(perspective.X[i],perspective.Y[i],perspective.X[i+1],perspective.Y[i+1], color[2]);
+		interpolationWithLineDDA(i, i+1, perspective, diffuse);
+	}
+	//draw last draw of the F letter
+	//drawLine(perspective.X[24],perspective.Y[24],perspective.X[15],perspective.Y[15], color[2]);
+	interpolationWithLineDDA(24, 15, perspective, diffuse);
+
+	drawSquares(0.8 , 35, viewerAngles);
+
+	drawShadow(xyzcoord, viewerAngles, perspective);
+
+	drawForest(0.2, 30, viewerAngles);
+}
+
+int main (void)
+
+{
+
+	 uint32_t pnum = PORT_NUM;
+
+	 pnum = 0 ;
+
+	 if ( pnum == 0 )
+		 SSP0Init();
+
+	 else
+		 puts("Port number is not correct");
+
+	 lcd_init();
+
+	 fillrect(0, 0, ST7735_TFTWIDTH, ST7735_TFTHEIGHT, BLACK);
+/*
+	 printf ("Point light is at (-50,20,100) \n");
+
+	 float Xe, Ye, Ze, D_focal;
+
+	 printf ("Please enter your Viewer Coordinate Xe, Ye, Ze \n");
+
+	 printf ("Enter Xe: ");
+	 scanf ("%f", &Xe);
+
+	 printf ("Enter Ye: ");
+	 scanf ("%f", &Ye);
+
+	 printf ("Enter Ze: ");
+	 scanf ("%f", &Ze);
+
+	 printf ("Enter D_focal: ");
+	 scanf ("%f", &D_focal);
+
+	 printf ("Your entered Viewer Coordinate: (%f, %f, %f) \n", Xe, Ye, Ze);
+	 printf ("D_Focal is set with %f \n", D_focal);
+
+	 mydisplay(Xe, Ye, Ze, D_focal);
+
+*/
+	 draw(390.0f, 415.0f, 250.0f, 30.0f, 100.0f, 0);
+
+
+/*
+	 int x0,x1,y0,y1;
+
+	 x0 = 0;
+	 x1 = ST7735_TFTWIDTH/2;
+	 y0 = 0;
+	 y1 = ST7735_TFTHEIGHT;
+
+	 drawLine(x0,y0,x1,y1,PURPLE);
+	 */
+
+	  return 0;
+
+}
+

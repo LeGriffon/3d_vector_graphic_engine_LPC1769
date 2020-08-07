@@ -1,0 +1,75 @@
+15:27:22 **** Incremental Build of configuration Debug for project DrawLine ****
+make -r -j7 all 
+Building file: ../src/final.c
+Invoking: MCU C Compiler
+arm-none-eabi-gcc -DDEBUG -D__CODE_RED -DCORE_M3 -D__USE_CMSIS=CMSIS_CORE_LPC17xx -D__LPC17XX__ -D__REDLIB__ -I"/Users/haoyuanwang/Documents/MCUXpressoIDE_10.3.0/workspace5/CMSIS_CORE_LPC17xx/inc" -O0 -fno-common -g3 -Wall -c -fmessage-length=0 -fno-builtin -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -specs=redlib.specs -MMD -MP -MF"src/final.d" -MT"src/final.o" -MT"src/final.d" -o "src/final.o" "../src/final.c"
+../src/final.c: In function 'fillrect':
+../src/final.c:176:10: warning: unused variable 'i' [-Wunused-variable]
+  int16_t i;
+          ^
+../src/final.c: In function 'lcddelay':
+../src/final.c:202:29: warning: statement with no effect [-Wunused-value]
+  for ( i = count*ms; i--; i > 0);
+                           ~~^~~
+../src/final.c: In function 'diffuseReflectionLetter':
+../src/final.c:549:9: warning: unused variable 'display_scaling' [-Wunused-variable]
+     int display_scaling = 15000;
+         ^~~~~~~~~~~~~~~
+../src/final.c: In function 'interpolationWithLineDDA':
+../src/final.c:598:41: warning: variable 'newy_bDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float newy_rDiff_Pt, newy_gDiff_Pt, newy_bDiff_Pt; //for interpolation
+                                         ^~~~~~~~~~~~~
+../src/final.c:598:26: warning: variable 'newy_gDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float newy_rDiff_Pt, newy_gDiff_Pt, newy_bDiff_Pt; //for interpolation
+                          ^~~~~~~~~~~~~
+../src/final.c:597:41: warning: variable 'newx_bDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float newx_rDiff_Pt, newx_gDiff_Pt, newx_bDiff_Pt; //for interpolation
+                                         ^~~~~~~~~~~~~
+../src/final.c:597:26: warning: variable 'newx_gDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float newx_rDiff_Pt, newx_gDiff_Pt, newx_bDiff_Pt; //for interpolation
+                          ^~~~~~~~~~~~~
+../src/final.c:577:61: warning: variable 'right_bDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float right_rDiff_Pt[UpperBD], right_gDiff_Pt[UpperBD], right_bDiff_Pt[UpperBD];
+                                                             ^~~~~~~~~~~~~~
+../src/final.c:577:36: warning: variable 'right_gDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float right_rDiff_Pt[UpperBD], right_gDiff_Pt[UpperBD], right_bDiff_Pt[UpperBD];
+                                    ^~~~~~~~~~~~~~
+../src/final.c:577:11: warning: variable 'right_rDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float right_rDiff_Pt[UpperBD], right_gDiff_Pt[UpperBD], right_bDiff_Pt[UpperBD];
+           ^~~~~~~~~~~~~~
+../src/final.c:576:59: warning: variable 'left_bDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float left_rDiff_Pt[UpperBD], left_gDiff_Pt[UpperBD], left_bDiff_Pt[UpperBD];
+                                                           ^~~~~~~~~~~~~
+../src/final.c:576:35: warning: variable 'left_gDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float left_rDiff_Pt[UpperBD], left_gDiff_Pt[UpperBD], left_bDiff_Pt[UpperBD];
+                                   ^~~~~~~~~~~~~
+../src/final.c:576:11: warning: variable 'left_rDiff_Pt' set but not used [-Wunused-but-set-variable]
+     float left_rDiff_Pt[UpperBD], left_gDiff_Pt[UpperBD], left_bDiff_Pt[UpperBD];
+           ^~~~~~~~~~~~~
+../src/final.c:575:55: warning: variable 'bDiff_Point' set but not used [-Wunused-but-set-variable]
+     float rDiff_Point[UpperBD], gDiff_Point[UpperBD], bDiff_Point[UpperBD];
+                                                       ^~~~~~~~~~~
+../src/final.c: In function 'drawTree':
+../src/final.c:827:6: warning: unused variable 'level' [-Wunused-variable]
+  int level = 0;
+      ^~~~~
+Finished building: ../src/final.c
+ 
+Building target: DrawLine.axf
+Invoking: MCU Linker
+arm-none-eabi-gcc -nostdlib -L"/Users/haoyuanwang/Documents/MCUXpressoIDE_10.3.0/workspace5/CMSIS_CORE_LPC17xx/Debug" -Xlinker -Map="DrawLine.map" -Xlinker --gc-sections -Xlinker -print-memory-usage -mcpu=cortex-m3 -mthumb -T "DrawLine_Debug.ld" -o "DrawLine.axf"  ./src/cr_startup_lpc175x_6x.o ./src/crp.o ./src/final.o ./src/ssp.o   -lCMSIS_CORE_LPC17xx
+Memory region         Used Size  Region Size  %age Used
+       MFlash512:       35608 B       512 KB      6.79%
+        RamLoc32:         784 B        32 KB      2.39%
+        RamAHB32:          0 GB        32 KB      0.00%
+Finished building target: DrawLine.axf
+ 
+make --no-print-directory post-build
+Performing post-build steps
+arm-none-eabi-size "DrawLine.axf"; # arm-none-eabi-objcopy -v -O binary "DrawLine.axf" "DrawLine.bin" ; # checksum -p LPC1769 -d "DrawLine.bin";
+   text	   data	    bss	    dec	    hex	filename
+  35372	    236	    548	  36156	   8d3c	DrawLine.axf
+ 
+
+15:27:23 Build Finished (took 354ms)
+

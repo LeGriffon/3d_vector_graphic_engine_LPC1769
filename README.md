@@ -4,12 +4,12 @@ This project is an implementation of a vector graphic representation on a SPI co
 
 The fitst graph implementations is a 2D vector graph engine that can produce two screensavers using two different functions. The implementation then upgraded to a 3D vector graphic representation on the SPI color display with FreeRTOS webserver. 
 
-<img src="https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_3999.jpg?raw=true" width="200"> <img src="https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_4017.jpg?raw=true" width="200">
+<img src="https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_3999.jpg?raw=true" width="300"> <img src="https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_4017.jpg?raw=true" width="300">
 
 
 The final graph implementations is a cube with 3D transformation pipeline on the center of the screen and the two screensavers from previous step printed onto the two sides of the cube with linear decoration. On the top of the cube has a printed F letter with diffusion interpolation with DDA algorithm. 
 
-![Result](https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_5224.jpg?raw=true)
+<img src="https://github.com/LeGriffon/3d_vector_graphic_engine_LPC1769/blob/master/imgs/IMG_5224.jpg?raw=true" width="400">
 
 The webserver is a FreeRTOS html website that is connected via TCP/IP protocol which is capable to start the screensaver by clicking the button on the html GUI interface.
 
